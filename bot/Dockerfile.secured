@@ -1,0 +1,21 @@
+# 1. Базовый образ
+FROM python:3.11-slim
+
+# 2. Создаем непривилегированного пользователя
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+
+# 3. Рабочая директория
+WORKDIR /app
+
+# 4. Копируем и устанавливаем зависимости
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 5. Копируем исходный код
+COPY main.py .
+
+# 6. Переключаем пользователя
+USER appuser
+
+# 7. Запуск приложения
+CMD ["python", "main.py"]

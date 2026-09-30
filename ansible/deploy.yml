@@ -1,0 +1,62 @@
+---
+- name: Deploy Secure Bot and Vulnerable Service
+  hosts: localhost
+  vars:
+    bot_token: "YOUR_TELEGRAM_BOT_TOKEN_HERE"
+
+  tasks:
+    # 1. Создаем изолированную сеть
+    - name: Create Isolated Docker Network
+      community.docker.docker_network:
+        name: isolated_net
+        state: present
+
+    # 2. Сборка и запуск ЗАЩИЩЕННОГО бота
+    - name: Build Secure Bot Image
+      community.docker.docker_image:
+        name: secure_bot:latest
+        build:
+          path: "../bot"
+          dockerfile: "Dockerfile.secured"
+        source: build
+
+    - name: Run Secure Bot Container
+      community.docker.docker_container:
+        name: secure_bot_container
+        image: secure_bot:latest
+        state: started
+        restart_policy: unless-stopped
+        networks:
+          - name: isolated_net
+        env:
+          BOT_TOKEN: "{{ bot_token }}"
+        # ЖЕСТКАЯ ЗАЩИТА:
+        read_only: true                  # Файловая система "только для чтения"
+        tmpfs:                          # Разрешаем запись только в оперативную память для временных файлов
+          - /tmp:rw,noexec,nosuid
+        capabilities: []                 # Отключаем ВСЕ привилегии Linux (cap_drop: ALL)
+        security_opts:
+          - "no-new-privileges:true"    # Запрещаем повышать права через SUID-файлы
+
+    # 3. Сборка и запуск НЕЗАЩИЩЕННОГО сервиса
+    - name: Build Unsecured Image
+      community.docker.docker_image:
+        name: vulnerable_app:latest
+        build:
+          path: "../vulnerable_app"
+          dockerfile: "Dockerfile.unsecured"
+        source: build
+
+    - name: Run Unsecured Container
+      community.docker.docker_container:
+        name: vulnerable_app_container
+        image: vulnerable_app:latest
+        state: started
+        restart_policy: unless-stopped
+        networks:
+          - name: isolated_net
+        ports:
+          - "8080:8080"
+        # ГРУБЫЕ ОШИБКИ БЕЗОПАСНОСТИ:
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock # Проброс сокета Docker!
